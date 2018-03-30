@@ -1,6 +1,6 @@
 import { Component } from 'react';
 import PropTypes from 'prop-types';
-import createStore from './index';
+import {createStore} from './index';
 
 class Provider extends Component {
     static propTypes = {
@@ -12,11 +12,10 @@ class Provider extends Component {
     }
     static childContextTypes = {
         store: PropTypes.shape({
-            dispatch: PropTypes.func.isRequired,
-            getData: PropTypes.func.isRequired,
-            addWatcher: PropTypes.func.isRequired,
-            removeWatcher: PropTypes.func.isRequired,
+            subscribe: PropTypes.func.isRequired,
+            unsubscribe: PropTypes.func.isRequired,
             bindActions: PropTypes.func.isRequired,
+            getstate: PropTypes.func.isRequired,
         }).isRequired,
     }
     constructor(props, context) {

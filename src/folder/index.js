@@ -1,105 +1,102 @@
-function doNotHave(obj, name) {
-    const value = obj[name];
-    return value == null || value == undefined;
+import connect from './connect';
+import Provider from './Provider'
+
+
+function getType(obj) {
+    return Object.prototype.toString.call(obj).replace(/(\[object\W+|\])/g, '').toLowerCase();
 }
-class ImCursor {
-    constructor(dispatch, getData) {
-        this.dispatch = dispatch;
-        this.getData = getData;
-        this.cursors = [];
-        this.basePath = [];
-    }
-    clear() {
-        this.cursors.length = 0;
-    }
-    goto(...args) {
-        this.basePath = args;
-    }
-    path(...args) {
-        return {
-            set: (value) => {
-                this.cursors.push({
-                    path: this.basePath.concat(args),
-                    value,
-                });
-            }
-        };
-    }
-    commit() {
-        this.dispatch(this.cursors);
-    }
-    get(...args) {
-        return this.getData(this.basePath.concat(args));
+
+function dispatch(path, value) {
+    if (path.length <= 0) { //路径到达，更新数据
+        if(getType(value)=='function'){
+            return value(this);
+        }
+        return value;
+    } else { // 复制更新路径中经历的数据节点
+        const key = path.pop();
+        if (this[key] == undefined) return this;
+        let newData = null;
+        if (getType(this) == 'object') {
+            newData = Object.assign({}, this);
+        } else if (getType(this) == 'array') {
+            newData = Object.assign([], this);
+        } else {
+            throw new Error(`can not dispatch in this type: ${getType(this)}`)
+        }
+        newData[key] = dispatch.call(newData[key], path, value);
+        return newData;
     }
 }
-function createStore(_data) {
-    const _watcher = new Map(); // key:[{id,watcher}]
-    function setIn({ path, value }) {
-        let pointer = _data;
-        path.forEach((item, index) => {
-            if (doNotHave(pointer, item)) {
-                pointer[item] = {};
-            }
-            if (index == path.length - 1) {
-                pointer[item] = value;
-            }
-            pointer = pointer[item];
-        });
-    }
-    function findWatcher({ path }) {
-        let wPath = '';
-        let result = _watcher.get('/') || [];
-        path.forEach((item) => {
-            wPath = wPath + '/' + item;
-            result = result.concat(_watcher.get(wPath) || []);
-        });
-        return result;
-    }
+
+function getPath(str) {
+    return str.split('/');
+}
+
+function getImCursor(dispatch, getstate) {
+    let rootPath = [];
+    const actions = [];
     return {
-        dispatch(cursor) {
-            let watchers = [];
-            cursor.forEach((item) => {
-                watchers = watchers.concat(findWatcher(item));
-                setIn(item);
-            });
-            watchers.forEach((item) => {
-                item.watcher(_data);
+        setRoot(pathStr) {
+            rootPath = getPath(pathStr);
+        },
+        set(pathStr, value) {
+            actions.push({
+                path: rootPath.concat(getPath(pathStr)),
+                value,
             });
         },
-        getData(paths) {
-            let pointer = _data;
-            for (let i = 0, len = paths.length; i < len; i++) {
-                if (doNotHave(pointer, paths[i])) {
-                    return undefined;
-                } else {
-                    pointer = pointer[paths[i]];
-                }
-            }
-            return pointer;
-        },
-        addWatcher(path, watcher) {
-            const key = '/' + path.join('/');
-            const current = _watcher.get(key) || [];
-            current.push({
-                id: current.length,
-                watcher,
+        update(pathstr, value) {
+            actions.push({
+                path: rootPath.concat(getPath(pathstr)),
+                value,
             });
-            _watcher.set(key, current);
-            return current.length;
         },
-        removeWatcher(path, id) {
-            const current = _watcher.get(path.join('/')) || [];
-            _watcher.set(path.join('/'), current.filter(item => item.id != id));
+        commit() {
+            dispatch(actions);
+        },
+        getstate
+    }
+}
+
+function createStore(data) {
+    let _tree = data;
+    let _listeners = [];
+    const callListener = () => {
+        _listeners.forEach(item => item());
+    }
+    const dispatchAction = (actions) => {
+        actions.forEach((item) => {
+            _tree = dispatch.call(_tree, item.path.reverse(), item.value);
+        });
+        callListener();
+    };
+    const getstate = () => {
+        return _tree;
+    };
+    return {
+        subscribe(listener) {
+            _listeners.push(listener);
+            return _listeners.length - 1;
+        },
+        unsubscribe(id) {
+            _listeners = _listeners.filter((item, index) => index != id);
         },
         bindActions(actions) {
-            const result = {};
+            const newAction = {};
             Object.keys(actions).forEach((key) => {
-                result[key] = actions[key].bind(new ImCursor(this.dispatch, this.getData));
+                newAction[key] = function (...args) {
+                    const newImCursor = getImCursor(dispatchAction, getstate);
+                    actions[key].apply(newImCursor, args);
+                }
             });
-            return result;
-        }
-    };
+            return newAction;
+        },
+        getstate
+    }
 }
 
-
-export default createStore;
+export {
+    connect,
+    createStore,
+    Provider
+}

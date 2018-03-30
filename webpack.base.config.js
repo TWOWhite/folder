@@ -5,7 +5,7 @@ const dlls = require('./config.js').dlls.map(item => item.key);
 
 const config = {
     entry: {
-        app: ['./src/index.jsx']
+        app: ['babel-polyfill', './src/index.jsx']
     },
     module: {
         rules: [

@@ -36,5 +36,5 @@ dlls.forEach(key=>{
 })
 
 config.stats='normal';
-config.devtools=null;
+// config.devtools=null;
 module.exports=config;

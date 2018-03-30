@@ -2,42 +2,59 @@ import React, { Component } from 'react';
 import PropTypes from 'prop-types';
 
 
-function connect(paths, actions, mapProps) {
+function connect(mapState, mapAction) {
+    const mapActionToProps = mapAction ? mapAction : () => ({});
+    const mapStateToProps = mapState ? mapState : () => ({});
     return function (comm) {
         class Connection extends Component {
             static contextTypes = {
                 store: PropTypes.shape({
-                    dispatch: PropTypes.func.isRequired,
-                    getData: PropTypes.func.isRequired,
-                    addWatcher: PropTypes.func.isRequired,
-                    removeWatcher: PropTypes.func.isRequired,
+                    subscribe: PropTypes.func.isRequired,
+                    unsubscribe: PropTypes.func.isRequired,
                     bindActions: PropTypes.func.isRequired,
+                    getstate: PropTypes.func.isRequired,
                 }).isRequired,
             }
             constructor(props, context) {
                 super(props, context);
-                const store = this.context.store;
+                this.store = this.context.store;
                 this.state = {
-                    actions: store.bindActions(actions),
-                    change: 0,
-                    watcherIds: [],
-                    data: store.getData(''),
+                    id: this.store.subscribe(this.updateComponent),
+                    tree: mapStateToProps(this.store.getstate())
                 };
-                paths.forEach((path) => {
-                    const id = store.addWatcher(path, this.updateComponent);
-                    this.state.watcherIds.push({ id, path });
-                });
+                this.actions = mapActionToProps(this.store.bindActions);
             }
             componentWillUnmount() {
-                this.state.watcherIds.forEach((item) => {
-                    this.context.store.removeWatcher(item.path, item.id);
-                });
+                this.store.unsubscribe(this.state.id);
             }
             updateComponent = () => {
-                this.setState(pre => ({ ...pre, change: pre.change + 1 }));
+                const newTree = mapStateToProps(this.store.getstate());
+                let isChange = false;
+                const newTreeKeys = Object.keys(newTree);
+                let oldTreeKeys = Object.keys(this.state.tree);
+                isChange = newTreeKeys.length != oldTreeKeys.length;
+                if (isChange == false) {
+                    for (let i = 0; i < newTreeKeys.length; i++) {
+                        const key = newTreeKeys[i];
+                        if (newTree[key] != this.state.tree[key]) {
+                            isChange = true;
+                            break;
+                        }
+                    }
+                }
+                if (isChange) {
+                    this.setState({
+                        ...this.state,
+                        tree: newTree,
+                    })
+                }
             }
             render() {
-                const props = mapProps(this.state.data, this.state.actions);
+                const props = {
+                    ...this.props,
+                    ...this.actions,
+                    ...this.state.tree
+                };
                 return React.createElement(comm, props, null);
             }
         }

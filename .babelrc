@@ -2,5 +2,6 @@
     "presets": [
         "react","env","stage-0"
     ],
-    "compact": "false"
+    "compact": "false",
+    "plugins": ["transform-decorators-legacy"]
 }
